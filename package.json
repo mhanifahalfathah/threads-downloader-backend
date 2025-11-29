@@ -11,26 +11,3 @@
     "axios": "^1.6.0"
   }
 }
-```
-
-4. Klik **"Commit new file"**
-
----
-
-### **LANGKAH 3: Deploy ke Vercel**
-
-1. Buka **vercel.com** dan login
-2. Klik **"Add New..." → "Project"**
-3. Kamu akan lihat list repository GitHub kamu
-4. Cari **`threads-downloader-backend`** → Klik **"Import"**
-5. **JANGAN UBAH APAPUN**, langsung klik **"Deploy"**
-6. Tunggu 1-2 menit (ada loading animation)
-7. Selesai! Kamu akan lihat **"Congratulations!"** 🎉
-
----
-
-### **LANGKAH 4: Copy URL Backend**
-
-1. Setelah deploy selesai, kamu akan lihat URL seperti:
-```
-   https://threads-downloader-backend-abc123xyz.vercel.app
