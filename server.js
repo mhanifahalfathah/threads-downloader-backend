@@ -1,4 +1,4 @@
-// Backend untuk Threads Downloader - Full Downloader Social Media (FIXED)
+// Backend untuk Threads Downloader - Pakai Social Download All In One API
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
@@ -12,7 +12,7 @@ app.use(express.json());
 
 // API Key dari RapidAPI
 const RAPIDAPI_KEY = '7d6950fa14msh4773e7b1465af96p1e4f71jsn1bd5d9b42395';
-const RAPIDAPI_HOST = 'full-downloader-social-media.p.rapidapi.com';
+const RAPIDAPI_HOST = 'social-download-all-in-one.p.rapidapi.com';
 
 // Endpoint untuk ambil data Threads
 app.post('/api/threads', async (req, res) => {
@@ -26,83 +26,43 @@ app.post('/api/threads', async (req, res) => {
       });
     }
 
-    // Call RapidAPI
+    // Call RapidAPI - Social Download All In One
     const options = {
-      method: 'GET',
-      url: 'https://full-downloader-social-media.p.rapidapi.com/',
-      params: { url: url },
+      method: 'POST',
+      url: 'https://social-download-all-in-one.p.rapidapi.com/v1/social/autolink',
       headers: {
+        'Content-Type': 'application/json',
         'x-rapidapi-key': RAPIDAPI_KEY,
         'x-rapidapi-host': RAPIDAPI_HOST
       },
-      timeout: 15000 // 15 detik timeout
+      data: {
+        url: url
+      }
     };
 
     const response = await axios.request(options);
     const data = response.data;
 
-    console.log('API Response:', JSON.stringify(data, null, 2)); // Debug log
-
-    // Parse response dari API dengan berbagai format
-    let mediaList = [];
-
-    // Format 1: Ada array medias
-    if (data.medias && Array.isArray(data.medias)) {
-      mediaList = data.medias;
-    }
-    // Format 2: Ada array images
-    else if (data.images && Array.isArray(data.images)) {
-      mediaList = data.images.map(img => ({
-        url: img,
-        extension: 'jpg'
-      }));
-    }
-    // Format 3: Ada single video_url
-    else if (data.video_url) {
-      mediaList = [{ url: data.video_url, extension: 'mp4' }];
-    }
-    // Format 4: Ada single image_url
-    else if (data.image_url) {
-      mediaList = [{ url: data.image_url, extension: 'jpg' }];
-    }
-    // Format 5: Ada array urls
-    else if (data.urls && Array.isArray(data.urls)) {
-      mediaList = data.urls.map(u => ({
-        url: u,
-        extension: u.includes('.mp4') ? 'mp4' : 'jpg'
-      }));
-    }
-
-    if (mediaList.length === 0) {
+    // Parse response dari API
+    if (!data || !data.medias || data.medias.length === 0) {
       return res.status(404).json({
         success: false,
-        error: 'Tidak ada media ditemukan dalam post ini',
-        debug: data // Kirim raw data untuk debugging
+        error: 'Tidak ada media ditemukan dalam post ini'
       });
     }
 
-    // Format media data dengan deteksi lebih baik
-    const media = mediaList.map((item, index) => {
-      let mediaUrl = item.url || item;
-      let fileExtension = item.extension || '';
-      
-      // Deteksi tipe dari URL
-      const isVideo = mediaUrl.includes('.mp4') || 
-                      mediaUrl.includes('video') ||
-                      fileExtension === 'mp4';
-      
-      const isImage = mediaUrl.includes('.jpg') || 
-                      mediaUrl.includes('.jpeg') || 
-                      mediaUrl.includes('.png') ||
-                      mediaUrl.includes('image') ||
-                      ['jpg', 'jpeg', 'png', 'webp'].includes(fileExtension);
+    // Format media data
+    const media = data.medias.map(item => {
+      // Deteksi tipe media dari URL atau extension
+      const isVideo = item.url.includes('.mp4') || 
+                      item.extension === 'mp4' || 
+                      item.type === 'video';
       
       return {
-        type: isVideo ? 'video' : (isImage ? 'image' : 'image'), // default ke image kalau nggak jelas
-        url: mediaUrl,
+        type: isVideo ? 'video' : 'image',
+        url: item.url,
         quality: item.quality || 'hd',
-        thumbnail: item.thumbnail || null,
-        index: index
+        thumbnail: item.thumbnail || null
       };
     });
 
@@ -118,13 +78,6 @@ app.post('/api/threads', async (req, res) => {
     console.error('API Error:', error.response?.data || error.message);
     
     // Handle specific errors
-    if (error.code === 'ECONNABORTED') {
-      return res.status(408).json({
-        success: false,
-        error: 'Request timeout. Server terlalu lama merespon 😔'
-      });
-    }
-
     if (error.response?.status === 429) {
       return res.status(429).json({
         success: false,
@@ -139,10 +92,17 @@ app.post('/api/threads', async (req, res) => {
       });
     }
 
+    if (error.response?.status === 400) {
+      return res.status(400).json({
+        success: false,
+        error: 'URL tidak valid atau format salah 🥺'
+      });
+    }
+
     return res.status(500).json({
       success: false,
       error: 'Gagal mengambil data dari Threads',
-      details: error.response?.data || error.message
+      details: error.response?.data?.message || error.message
     });
   }
 });
@@ -151,7 +111,7 @@ app.post('/api/threads', async (req, res) => {
 app.get('/', (req, res) => {
   res.json({ 
     status: 'OK', 
-    message: 'Threads Downloader API Running (Fixed Version)',
+    message: 'Threads Downloader API Running with Social Download All In One',
     endpoints: {
       'POST /api/threads': 'Ambil data media dari URL Threads'
     }
