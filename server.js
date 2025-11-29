@@ -1,4 +1,4 @@
-// Backend untuk Threads Downloader - Pakai RapidAPI
+// Backend untuk Threads Downloader - Pakai Social Download All In One API
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
@@ -12,7 +12,7 @@ app.use(express.json());
 
 // API Key dari RapidAPI
 const RAPIDAPI_KEY = '7d6950fa14msh4773e7b1465af96p1e4f71jsn1bd5d9b42395';
-const RAPIDAPI_HOST = 'full-downloader-social-media.p.rapidapi.com';
+const RAPIDAPI_HOST = 'social-download-all-in-one.p.rapidapi.com';
 
 // Endpoint untuk ambil data Threads
 app.post('/api/threads', async (req, res) => {
@@ -26,14 +26,17 @@ app.post('/api/threads', async (req, res) => {
       });
     }
 
-    // Call RapidAPI
+    // Call RapidAPI - Social Download All In One
     const options = {
-      method: 'GET',
-      url: 'https://full-downloader-social-media.p.rapidapi.com/',
-      params: { url: url },
+      method: 'POST',
+      url: 'https://social-download-all-in-one.p.rapidapi.com/v1/social/autolink',
       headers: {
+        'Content-Type': 'application/json',
         'x-rapidapi-key': RAPIDAPI_KEY,
         'x-rapidapi-host': RAPIDAPI_HOST
+      },
+      data: {
+        url: url
       }
     };
 
@@ -50,10 +53,16 @@ app.post('/api/threads', async (req, res) => {
 
     // Format media data
     const media = data.medias.map(item => {
+      // Deteksi tipe media dari URL atau extension
+      const isVideo = item.url.includes('.mp4') || 
+                      item.extension === 'mp4' || 
+                      item.type === 'video';
+      
       return {
-        type: item.extension === 'mp4' ? 'video' : 'image',
+        type: isVideo ? 'video' : 'image',
         url: item.url,
-        quality: item.quality || 'hd'
+        quality: item.quality || 'hd',
+        thumbnail: item.thumbnail || null
       };
     });
 
@@ -61,8 +70,8 @@ app.post('/api/threads', async (req, res) => {
       success: true,
       media: media,
       count: media.length,
-      caption: data.caption || '',
-      author: data.author || ''
+      caption: data.caption || data.title || '',
+      author: data.author || data.username || ''
     });
 
   } catch (error) {
@@ -83,10 +92,17 @@ app.post('/api/threads', async (req, res) => {
       });
     }
 
+    if (error.response?.status === 400) {
+      return res.status(400).json({
+        success: false,
+        error: 'URL tidak valid atau format salah 🥺'
+      });
+    }
+
     return res.status(500).json({
       success: false,
       error: 'Gagal mengambil data dari Threads',
-      details: error.message
+      details: error.response?.data?.message || error.message
     });
   }
 });
@@ -95,7 +111,7 @@ app.post('/api/threads', async (req, res) => {
 app.get('/', (req, res) => {
   res.json({ 
     status: 'OK', 
-    message: 'Threads Downloader API Running with RapidAPI',
+    message: 'Threads Downloader API Running with Social Download All In One',
     endpoints: {
       'POST /api/threads': 'Ambil data media dari URL Threads'
     }
