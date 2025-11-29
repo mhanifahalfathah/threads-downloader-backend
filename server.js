@@ -1,4 +1,4 @@
-// Backend untuk Threads Downloader - Full Downloader Social Media (FIXED)
+// Backend untuk Threads Downloader - With Image Proxy
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
@@ -35,38 +35,29 @@ app.post('/api/threads', async (req, res) => {
         'x-rapidapi-key': RAPIDAPI_KEY,
         'x-rapidapi-host': RAPIDAPI_HOST
       },
-      timeout: 15000 // 15 detik timeout
+      timeout: 15000
     };
 
     const response = await axios.request(options);
     const data = response.data;
 
-    console.log('API Response:', JSON.stringify(data, null, 2)); // Debug log
+    console.log('API Response:', JSON.stringify(data, null, 2));
 
-    // Parse response dari API dengan berbagai format
+    // Parse response
     let mediaList = [];
 
-    // Format 1: Ada array medias
     if (data.medias && Array.isArray(data.medias)) {
       mediaList = data.medias;
-    }
-    // Format 2: Ada array images
-    else if (data.images && Array.isArray(data.images)) {
+    } else if (data.images && Array.isArray(data.images)) {
       mediaList = data.images.map(img => ({
         url: img,
         extension: 'jpg'
       }));
-    }
-    // Format 3: Ada single video_url
-    else if (data.video_url) {
+    } else if (data.video_url) {
       mediaList = [{ url: data.video_url, extension: 'mp4' }];
-    }
-    // Format 4: Ada single image_url
-    else if (data.image_url) {
+    } else if (data.image_url) {
       mediaList = [{ url: data.image_url, extension: 'jpg' }];
-    }
-    // Format 5: Ada array urls
-    else if (data.urls && Array.isArray(data.urls)) {
+    } else if (data.urls && Array.isArray(data.urls)) {
       mediaList = data.urls.map(u => ({
         url: u,
         extension: u.includes('.mp4') ? 'mp4' : 'jpg'
@@ -76,17 +67,16 @@ app.post('/api/threads', async (req, res) => {
     if (mediaList.length === 0) {
       return res.status(404).json({
         success: false,
-        error: 'Tidak ada media ditemukan dalam post ini',
-        debug: data // Kirim raw data untuk debugging
+        error: 'Tidak ada media ditemukan dalam post ini'
       });
     }
 
-    // Format media data dengan deteksi lebih baik
+    // Format media data - GUNAKAN PROXY URL untuk semua media
+    const baseUrl = req.protocol + '://' + req.get('host');
     const media = mediaList.map((item, index) => {
       let mediaUrl = item.url || item;
       let fileExtension = item.extension || '';
       
-      // Deteksi tipe dari URL
       const isVideo = mediaUrl.includes('.mp4') || 
                       mediaUrl.includes('video') ||
                       fileExtension === 'mp4';
@@ -97,11 +87,14 @@ app.post('/api/threads', async (req, res) => {
                       mediaUrl.includes('image') ||
                       ['jpg', 'jpeg', 'png', 'webp'].includes(fileExtension);
       
+      // PENTING: Encode URL asli ke base64 biar aman
+      const encodedUrl = Buffer.from(mediaUrl).toString('base64');
+      
       return {
-        type: isVideo ? 'video' : (isImage ? 'image' : 'image'), // default ke image kalau nggak jelas
-        url: mediaUrl,
+        type: isVideo ? 'video' : 'image',
+        url: `${baseUrl}/api/proxy?url=${encodedUrl}`, // URL proxy
+        originalUrl: mediaUrl, // URL asli untuk fallback
         quality: item.quality || 'hd',
-        thumbnail: item.thumbnail || null,
         index: index
       };
     });
@@ -117,7 +110,6 @@ app.post('/api/threads', async (req, res) => {
   } catch (error) {
     console.error('API Error:', error.response?.data || error.message);
     
-    // Handle specific errors
     if (error.code === 'ECONNABORTED') {
       return res.status(408).json({
         success: false,
@@ -132,17 +124,57 @@ app.post('/api/threads', async (req, res) => {
       });
     }
 
-    if (error.response?.status === 404) {
-      return res.status(404).json({
-        success: false,
-        error: 'Post tidak ditemukan. Pastikan link-nya benar 🥺'
-      });
-    }
-
     return res.status(500).json({
       success: false,
       error: 'Gagal mengambil data dari Threads',
-      details: error.response?.data || error.message
+      details: error.message
+    });
+  }
+});
+
+// ENDPOINT BARU: Proxy untuk download media
+app.get('/api/proxy', async (req, res) => {
+  try {
+    const { url } = req.query;
+    
+    if (!url) {
+      return res.status(400).json({ error: 'URL parameter required' });
+    }
+
+    // Decode URL dari base64
+    const decodedUrl = Buffer.from(url, 'base64').toString('utf-8');
+    
+    console.log('Proxying URL:', decodedUrl);
+
+    // Download media dengan headers yang proper
+    const response = await axios({
+      method: 'GET',
+      url: decodedUrl,
+      responseType: 'arraybuffer',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://www.threads.net/',
+        'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8'
+      },
+      timeout: 30000
+    });
+
+    // Deteksi content type
+    const contentType = response.headers['content-type'] || 'application/octet-stream';
+    
+    // Set headers untuk response
+    res.set('Content-Type', contentType);
+    res.set('Cache-Control', 'public, max-age=86400'); // Cache 24 jam
+    res.set('Access-Control-Allow-Origin', '*');
+    
+    // Kirim file
+    res.send(response.data);
+
+  } catch (error) {
+    console.error('Proxy Error:', error.message);
+    res.status(500).json({ 
+      error: 'Gagal mengambil media',
+      details: error.message 
     });
   }
 });
@@ -151,9 +183,10 @@ app.post('/api/threads', async (req, res) => {
 app.get('/', (req, res) => {
   res.json({ 
     status: 'OK', 
-    message: 'Threads Downloader API Running (Fixed Version)',
+    message: 'Threads Downloader API Running (With Proxy)',
     endpoints: {
-      'POST /api/threads': 'Ambil data media dari URL Threads'
+      'POST /api/threads': 'Ambil data media dari URL Threads',
+      'GET /api/proxy': 'Proxy untuk download media'
     }
   });
 });
